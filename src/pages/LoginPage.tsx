@@ -91,6 +91,10 @@ export function LoginPage() {
   const [error, setError] = useState('');
 
   const detectedBase = useMemo(() => detectApiBaseFromLocation(), []);
+  const appVersion = __APP_VERSION__ || 'dev';
+  const appBuildDate = typeof __APP_BUILD_DATE__ !== 'undefined' && __APP_BUILD_DATE__
+    ? new Date(__APP_BUILD_DATE__).toLocaleString(language)
+    : 'Unknown';
   const languageOptions = useMemo(
     () =>
       LANGUAGE_ORDER.map((lang) => ({
@@ -108,6 +112,11 @@ export function LoginPage() {
     },
     [setLanguage]
   );
+
+
+  useEffect(() => {
+    document.title = `CPAMC ${appVersion}`;
+  }, [appVersion]);
 
   useEffect(() => {
     const init = async () => {
@@ -204,6 +213,7 @@ export function LoginPage() {
             </div>
           </div>
         ) : (
+          <>
           /* 登录表单 */
           <div className={styles.formContent}>
             {/* Logo */}
@@ -289,6 +299,12 @@ export function LoginPage() {
                 />
               </div>
 
+
+              <div className={styles.buildMeta}>
+                <span className={styles.buildVersion}>UI {appVersion}</span>
+                <span className={styles.buildDate}>{appBuildDate}</span>
+              </div>
+
               <Button fullWidth onClick={handleSubmit} loading={loading}>
                 {loading ? t('login.submitting') : t('login.submit_button')}
               </Button>
@@ -296,6 +312,11 @@ export function LoginPage() {
               {error && <div className={styles.errorBox}>{error}</div>}
             </div>
           </div>
+          <div className={styles.loginFooter}>
+            <span>UI {appVersion}</span>
+            <span>{appBuildDate}</span>
+          </div>
+          </>
         )}
       </div>
     </div>

@@ -243,6 +243,10 @@ export function MainLayout() {
   const headerRef = useRef<HTMLElement | null>(null);
 
   const fullBrandName = 'CLI Proxy API Management Center';
+  const uiVersion = __APP_VERSION__ || 'dev';
+  const layoutBuildMeta = typeof __APP_BUILD_DATE__ !== 'undefined' && __APP_BUILD_DATE__
+    ? new Date(__APP_BUILD_DATE__).toLocaleString(language)
+    : 'Unknown';
   const abbrBrandName = t('title.abbr');
   const isLogsPage = location.pathname.startsWith('/logs');
 
@@ -590,6 +594,7 @@ export function MainLayout() {
               )}
             </span>
             <span className="base">{apiBase || '-'}</span>
+            <span className="header-ui-version">UI {uiVersion}</span>
           </div>
 
           <div className="header-actions">
@@ -751,6 +756,11 @@ export function MainLayout() {
             />
           </main>
         </div>
+      </div>
+
+      <div className="global-build-footer">
+        <span>UI {uiVersion}</span>
+        <span>{layoutBuildMeta}</span>
       </div>
     </div>
   );

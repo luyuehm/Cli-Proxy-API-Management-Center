@@ -35,16 +35,111 @@ function getVersion(): string {
   return 'dev';
 }
 
+
+function getShortCommit(): string {
+  if (process.env.GIT_COMMIT_SHORT) {
+    return process.env.GIT_COMMIT_SHORT;
+  }
+
+  try {
+    return execSync('git rev-parse --short HEAD 2>/dev/null || echo ""', { encoding: 'utf8' }).trim();
+  } catch {
+    return '';
+  }
+}
+
+function getVersionLabel(): string {
+  return getReleaseVersion();
+}
+
+
+function getBuildStamp(): string {
+  const iso = getBuildDate();
+  return iso.replace(/[-:TZ.]/g, '').slice(0, 12);
+}
+
+
+
+function getVersionSuffix(): string {
+  const explicit = process.env.VERSION_SUFFIX || process.env.RELEASE_SUFFIX || process.env.BETA_SUFFIX;
+  if (!explicit) return '';
+  const cleaned = explicit.trim().replace(/^[-+]+/, '');
+  return cleaned ? `-${cleaned}` : '';
+}
+
+function formatDateStamp(date: string): string {
+  return date.slice(0, 10).replace(/-/g, '.');
+}
+
+function getReleaseVersion(): string {
+  if (process.env.VERSION) {
+    return process.env.VERSION;
+  }
+  const buildDate = getBuildDate();
+  const datePart = formatDateStamp(buildDate);
+  const suffix = getVersionSuffix();
+  return `v${datePart}${suffix}`;
+}
+
+function getBuildDate(): string {
+  if (process.env.BUILD_DATE) {
+    return process.env.BUILD_DATE;
+  }
+  return new Date().toISOString();
+}
+
+
+function writeBuildInfoPlugin() {
+  return {
+    name: 'write-build-info',
+    closeBundle() {
+      const version = getVersionLabel();
+      const buildDate = getBuildDate();
+      const buildStamp = getBuildStamp();
+      const outDir = `dist-${version.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/\./g, '-')}-${buildStamp}`;
+      const payload = {
+        name: 'cli-proxy-webui-react',
+        version,
+        buildDate,
+        buildStamp,
+        commit: getShortCommit() || null
+      };
+      const releaseNotes = [
+        '# Release Notes',
+        '',
+        `- Name: ${payload.name}`,
+        `- Version: ${payload.version}`,
+        `- Build Date: ${payload.buildDate}`,
+        `- Build Stamp: ${payload.buildStamp}`,
+        `- Commit: ${payload.commit || 'unknown'}`,
+        '',
+        '## Included metadata',
+        '- Login page version/build date',
+        '- System page version/build date',
+        '- Header UI version badge',
+        '- Global footer build metadata',
+        '- BUILD_INFO.json embedded in release bundle'
+      ].join('\n') + '\n';
+      fs.writeFileSync(path.resolve(__dirname, outDir, 'BUILD_INFO.json'), JSON.stringify(payload, null, 2) + '\n');
+      fs.writeFileSync(path.resolve(__dirname, outDir, 'RELEASE.md'), releaseNotes);
+      fs.writeFileSync(path.resolve(__dirname, 'RELEASE.md'), releaseNotes);
+    }
+  };
+}
+
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
     react(),
+    writeBuildInfoPlugin(),
     viteSingleFile({
       removeViteModuleLoader: true
     })
   ],
   define: {
-    __APP_VERSION__: JSON.stringify(getVersion())
+    __APP_VERSION__: JSON.stringify(getVersionLabel()),
+    __APP_BUILD_DATE__: JSON.stringify(getBuildDate()),
+    __APP_BUILD_STAMP__: JSON.stringify(getBuildStamp())
   },
   resolve: {
     alias: {
@@ -64,7 +159,8 @@ export default defineConfig({
   },
   build: {
     target: 'es2020',
-    outDir: 'dist',
+    outDir: `dist-${getVersionLabel().replace(/[^a-zA-Z0-9._-]/g, '_').replace(/\./g, '-')}-${getBuildStamp()}`,
+    emptyOutDir: true,
     assetsInlineLimit: 100000000,
     chunkSizeWarningLimit: 100000000,
     cssCodeSplit: false,
