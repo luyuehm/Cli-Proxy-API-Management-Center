@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
@@ -12,6 +13,7 @@ import { LANGUAGE_LABEL_KEYS, LANGUAGE_ORDER } from '@/utils/constants';
 import { isSupportedLanguage } from '@/utils/language';
 import { INLINE_LOGO_JPEG } from '@/assets/logoInline';
 import type { ApiError } from '@/types';
+import { promptForLoginError } from './loginErrorPrompt';
 import styles from './LoginPage.module.scss';
 
 /**
@@ -19,66 +21,38 @@ import styles from './LoginPage.module.scss';
  */
 type RedirectState = { from?: { pathname?: string } };
 
-function getLocalizedErrorMessage(error: unknown, t: (key: string) => string): string {
+function getLocalizedErrorMessage(error: unknown, t: TFunction): string {
+  // The prompt is chosen by a tested decision table; the raw backend text is
+  // never rendered, so provider names, HTML and proxy detail cannot leak here.
+  const prompt = promptForLoginError(error);
+
   const apiError = error as Partial<ApiError>;
   const status = typeof apiError.status === 'number' ? apiError.status : undefined;
-  const code = typeof apiError.code === 'string' ? apiError.code : undefined;
-  const message =
-    error instanceof Error
-      ? error.message
-      : typeof apiError.message === 'string'
-        ? apiError.message
-        : typeof error === 'string'
-          ? error
-          : '';
 
   const withHttpStatus = (summary: string) => {
     if (!status) {
       return summary;
     }
-
-    const genericAxiosMessage = `Request failed with status code ${status}`;
-    const detail = message.trim();
-    const backendDetail =
-      detail && detail !== genericAxiosMessage
-        ? ` (${t('login.error_backend_detail')}: ${detail})`
-        : '';
-
-    return `HTTP ${status}: ${summary}${backendDetail}`;
+    return `HTTP ${status}: ${summary}`;
   };
 
-  // 根据 HTTP 状态码判断
-  if (status === 401) {
-    return withHttpStatus(t('login.error_unauthorized'));
-  }
-  if (status === 403) {
-    return withHttpStatus(t('login.error_forbidden'));
-  }
-  if (status === 404) {
-    return withHttpStatus(t('login.error_not_found'));
-  }
-  if (status && status >= 500) {
-    return withHttpStatus(t('login.error_server'));
+  if (prompt.key === 'login.error_rate_limited' && prompt.retryAfter) {
+    return `${withHttpStatus(t(prompt.key))}（${t('login.error_retry_after', {
+      seconds: prompt.retryAfter,
+    })}）`;
   }
 
-  // 根据 axios 错误码判断
-  if (code === 'ECONNABORTED' || message.toLowerCase().includes('timeout')) {
-    return t('login.error_timeout');
-  }
-  if (code === 'ERR_NETWORK' || message.toLowerCase().includes('network error')) {
-    return t('login.error_network');
-  }
-  if (code === 'ERR_CERT_AUTHORITY_INVALID' || message.toLowerCase().includes('certificate')) {
-    return t('login.error_ssl');
-  }
-
-  // 检查 CORS 错误
-  if (message.toLowerCase().includes('cors') || message.toLowerCase().includes('cross-origin')) {
-    return t('login.error_cors');
+  // 网络类错误没有 HTTP 状态码，直接返回友好提示
+  if (
+    prompt.key === 'login.error_network' ||
+    prompt.key === 'login.error_timeout' ||
+    prompt.key === 'login.error_ssl' ||
+    prompt.key === 'login.error_cors'
+  ) {
+    return t(prompt.key);
   }
 
-  // 默认错误消息
-  return withHttpStatus(t('login.error_invalid'));
+  return withHttpStatus(t(prompt.key));
 }
 
 export function LoginPage() {
